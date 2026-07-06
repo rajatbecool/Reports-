@@ -1,0 +1,22 @@
+Search No,Source Folder,Evidence rows,URL mentions,Unique exact URLs in folder
+01,01_Brand_Tier_Segmentation,15,16,16
+02,02_Current_Primary_Packaging_Materials,18,18,18
+03,03_Current_Secondary_Tertiary_Packaging_Materials,18,19,19
+04,04_Common_Material_Price_Baseline,18,18,18
+05,05_Density_Weight_Baseline,18,18,18
+06,06_Cosmetic_Compatibility_Regulatory_Constraints,20,24,24
+07,07_Logistics_Cost_Weight_Link,19,18,18
+08,08_Food_Beverage_Lightweight_Material_Transfer,18,18,18
+09,09_Pharma_Healthcare_Lightweight_Material_Transfer,18,19,19
+10,10_Auto_Aerospace_Electronics_Lightweight_Material_Scan,18,18,18
+11,11_Thin_Wall_Downgauged_Plastic_Packaging,18,19,19
+12,12_Foamed_Microcellular_Plastic_Packaging,18,18,18
+13,13_Flexible_Refill_Pouches_MonoMaterial_Films,18,18,18
+14,14_Lightweight_Tubes_Laminates,18,18,18
+15,15_Lightweight_Paperboard_Cartons,18,19,19
+16,16_Molded_Pulp_Fiber_Inserts_Protective_Packaging,18,18,18
+17,17_Barrier_Coated_Paper_Fiber_Materials,18,18,18
+18,18_Lightweight_Caps_Closures_Pumps_Dispensers,18,18,18
+19,19_PCR_Recycled_BioBased_Materials,18,18,18
+20,20_Price_First_Screening_Decision_Matrix,18,18,18
+TOTAL,All 20 Search folders,360,368,341
