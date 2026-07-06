@@ -1,0 +1,151 @@
+name: Build Search Total CSV
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-search-total.yml'
+      - 'Search/**/evidence.csv'
+      - '!Search/total/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-total-csv:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build combined Search CSVs
+        shell: bash
+        run: |
+          python - <<'PY'
+          import csv
+          import re
+          from pathlib import Path
+          from urllib.parse import urlparse, urlunparse
+
+          root = Path('Search')
+          total_dir = root / 'total'
+          total_dir.mkdir(parents=True, exist_ok=True)
+
+          evidence_files = sorted(
+              p for p in root.glob('[0-9][0-9]_*/*evidence.csv')
+              if p.is_file() and 'total' not in p.parts
+          )
+
+          combined_path = total_dir / 'combined_evidence.csv'
+          links_path = total_dir / 'unique_links.csv'
+          summary_path = total_dir / 'summary.csv'
+
+          fieldnames = [
+              'Search No',
+              'Source Folder',
+              'Source code',
+              'Summary of what was found',
+              'Detailed description of what was found',
+              'Source name',
+              'URLs extracted',
+          ]
+
+          url_pattern = re.compile(r'https?://[^\s,;"<>]+')
+
+          def clean_url(url: str) -> str:
+              url = url.strip().rstrip(').,;')
+              parsed = urlparse(url)
+              return urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, parsed.query, parsed.fragment))
+
+          all_rows = []
+          links = []
+          summary_rows = []
+
+          for evidence_file in evidence_files:
+              folder = evidence_file.parent.name
+              search_no = folder.split('_', 1)[0]
+              folder_rows = 0
+              folder_links = []
+
+              with evidence_file.open('r', encoding='utf-8-sig', newline='') as f:
+                  reader = csv.DictReader(f)
+                  for row in reader:
+                      source_name = row.get('Source name', '') or ''
+                      extracted = [clean_url(u) for u in url_pattern.findall(source_name)]
+                      folder_links.extend(extracted)
+                      links.extend(extracted)
+                      folder_rows += 1
+
+                      all_rows.append({
+                          'Search No': search_no,
+                          'Source Folder': folder,
+                          'Source code': row.get('Source code', ''),
+                          'Summary of what was found': row.get('Summary of what was found', ''),
+                          'Detailed description of what was found': row.get('Detailed description of what was found', ''),
+                          'Source name': source_name,
+                          'URLs extracted': ' ; '.join(extracted),
+                      })
+
+              summary_rows.append({
+                  'Search No': search_no,
+                  'Source Folder': folder,
+                  'Evidence rows': folder_rows,
+                  'URL mentions': len(folder_links),
+                  'Unique exact URLs in folder': len(set(folder_links)),
+              })
+
+          with combined_path.open('w', encoding='utf-8', newline='') as f:
+              writer = csv.DictWriter(f, fieldnames=fieldnames)
+              writer.writeheader()
+              writer.writerows(all_rows)
+
+          unique_links = sorted(set(links))
+          with links_path.open('w', encoding='utf-8', newline='') as f:
+              writer = csv.writer(f)
+              writer.writerow(['URL'])
+              for link in unique_links:
+                  writer.writerow([link])
+
+          with summary_path.open('w', encoding='utf-8', newline='') as f:
+              writer = csv.DictWriter(f, fieldnames=['Search No', 'Source Folder', 'Evidence rows', 'URL mentions', 'Unique exact URLs in folder'])
+              writer.writeheader()
+              writer.writerows(summary_rows)
+              writer.writerow({
+                  'Search No': 'TOTAL',
+                  'Source Folder': 'All 20 Search folders',
+                  'Evidence rows': len(all_rows),
+                  'URL mentions': len(links),
+                  'Unique exact URLs in folder': len(unique_links),
+              })
+
+          readme = total_dir / 'README.md'
+          readme.write_text(
+              '# Total Search Evidence\n\n'
+              'This folder is generated from the 20 non-patent `Search/*/evidence.csv` workstream folders.\n\n'
+              'Files:\n'
+              '- `combined_evidence.csv`: all evidence rows combined, with source-folder traceability.\n'
+              '- `unique_links.csv`: de-duplicated exact URLs extracted from the combined source fields.\n'
+              '- `summary.csv`: row and link counts by workstream plus total.\n\n'
+              'Generation rule: the original 20 evidence folders remain the source universe. This folder is only an aggregate view.\n',
+              encoding='utf-8'
+          )
+
+          print(f'Combined {len(all_rows)} evidence rows from {len(evidence_files)} files.')
+          print(f'Found {len(links)} URL mentions and {len(unique_links)} unique exact URLs.')
+          PY
+
+      - name: Commit generated total CSVs
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Search/total/README.md Search/total/combined_evidence.csv Search/total/unique_links.csv Search/total/summary.csv
+          if git diff --cached --quiet; then
+            echo "No generated total CSV changes to commit."
+          else
+            git commit -m "Generate total search evidence CSVs"
+            git push
+          fi
