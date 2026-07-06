@@ -1,0 +1,213 @@
+name: Build Creations Title Page
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-creations-title-page.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-title-page:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install python-docx pillow
+
+      - name: Generate GreyB title page in Creations
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from PIL import Image, ImageDraw, ImageFilter
+          from docx import Document
+          from docx.shared import Inches, Pt, RGBColor
+          from docx.enum.text import WD_ALIGN_PARAGRAPH
+          from docx.enum.section import WD_SECTION_START
+          from docx.enum.table import WD_TABLE_ALIGNMENT, WD_CELL_VERTICAL_ALIGNMENT
+          from docx.oxml import OxmlElement
+          from docx.oxml.ns import qn
+
+          out_dir = Path('Creations')
+          out_dir.mkdir(parents=True, exist_ok=True)
+
+          hero_path = out_dir / 'cosmetic_packaging_hero.png'
+          docx_path = out_dir / 'greyb_cosmetic_packaging_title_page.docx'
+          readme_path = out_dir / 'README.md'
+
+          W, H = 1800, 920
+          img = Image.new('RGB', (W, H), '#f4f6f8')
+          draw = ImageDraw.Draw(img)
+
+          # Soft corporate background gradient
+          for y in range(H):
+              shade = int(246 - (y / H) * 18)
+              draw.line([(0, y), (W, y)], fill=(shade, shade + 2, shade + 5))
+
+          # Abstract premium packaging silhouettes
+          def rounded_rect(x0, y0, x1, y1, r, fill, outline=None, width=2):
+              draw.rounded_rectangle([x0, y0, x1, y1], radius=r, fill=fill, outline=outline, width=width)
+
+          # Glass jar
+          rounded_rect(230, 385, 530, 775, 42, '#ffffff', '#c7ccd2', 4)
+          rounded_rect(250, 325, 510, 405, 28, '#dce1e6', '#b8c0c9', 3)
+          draw.rectangle([280, 295, 480, 345], fill='#eef1f4', outline='#c5ccd4', width=3)
+
+          # Pump bottle
+          rounded_rect(625, 265, 895, 775, 45, '#e9edf2', '#bfc7d0', 4)
+          draw.rectangle([705, 205, 815, 265], fill='#d9dee5', outline='#b5bec9', width=3)
+          draw.rectangle([748, 165, 1050, 205], fill='#cdd5df', outline='#aab5c0', width=3)
+          draw.rectangle([996, 182, 1050, 250], fill='#cdd5df', outline='#aab5c0', width=3)
+
+          # Refill pouch
+          rounded_rect(1045, 355, 1395, 775, 70, '#ffffff', '#c7ccd2', 4)
+          draw.polygon([(1085, 775), (1360, 775), (1325, 845), (1120, 845)], fill='#e3e8ef', outline='#b7c0cb')
+          draw.ellipse([1190, 405, 1250, 465], fill='#d8dee7', outline='#adb8c4')
+
+          # Folding carton / board
+          draw.polygon([(1460, 395), (1640, 345), (1640, 745), (1460, 795)], fill='#e8edf3', outline='#b8c2cc')
+          draw.polygon([(1300, 335), (1460, 395), (1460, 795), (1300, 725)], fill='#ffffff', outline='#c3cad2')
+          draw.polygon([(1300, 335), (1482, 290), (1640, 345), (1460, 395)], fill='#d9e0e8', outline='#b1bbc6')
+
+          # Subtle highlight bands
+          for x in [310, 710, 1150, 1360]:
+              draw.line([(x, 260), (x + 140, 790)], fill='#ffffff', width=3)
+
+          # Decorative material nodes
+          node_colors = ['#111827', '#6b7280', '#9ca3af', '#d1d5db']
+          for i, (cx, cy) in enumerate([(190,180),(310,150),(1470,160),(1600,215),(970,125),(1120,170)]):
+              draw.ellipse([cx-10, cy-10, cx+10, cy+10], fill=node_colors[i % len(node_colors)])
+              if i > 0:
+                  prev = [(190,180),(310,150),(1470,160),(1600,215),(970,125),(1120,170)][i-1]
+                  draw.line([prev, (cx,cy)], fill='#c5ccd5', width=2)
+
+          img = img.filter(ImageFilter.UnsharpMask(radius=1, percent=115, threshold=3))
+          img.save(hero_path, quality=95)
+
+          doc = Document()
+          section = doc.sections[0]
+          section.page_width = Inches(8.27)
+          section.page_height = Inches(11.69)
+          section.top_margin = Inches(0.55)
+          section.bottom_margin = Inches(0.55)
+          section.left_margin = Inches(0.65)
+          section.right_margin = Inches(0.65)
+
+          # Page border-like top rule
+          p = doc.add_paragraph()
+          p.paragraph_format.space_after = Pt(6)
+          r = p.add_run('GreyB')
+          r.font.name = 'Aptos Display'
+          r.font.size = Pt(18)
+          r.font.bold = True
+          r.font.color.rgb = RGBColor(17, 24, 39)
+          p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+
+          p = doc.add_paragraph()
+          p.paragraph_format.space_after = Pt(12)
+          r = p.add_run('CONFIDENTIAL RESEARCH STUDY')
+          r.font.name = 'Aptos'
+          r.font.size = Pt(9)
+          r.font.bold = True
+          r.font.color.rgb = RGBColor(107, 114, 128)
+
+          doc.add_picture(str(hero_path), width=Inches(6.95))
+          doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+          p = doc.add_paragraph()
+          p.paragraph_format.space_before = Pt(28)
+          p.paragraph_format.space_after = Pt(4)
+          r = p.add_run('Cosmetic Packaging Lightweighting Study')
+          r.font.name = 'Aptos Display'
+          r.font.size = Pt(27)
+          r.font.bold = True
+          r.font.color.rgb = RGBColor(17, 24, 39)
+
+          p = doc.add_paragraph()
+          p.paragraph_format.space_after = Pt(20)
+          r = p.add_run('Commercial Material Opportunity Landscape complemented by Patent Landscape & IP White-Space Analysis')
+          r.font.name = 'Aptos'
+          r.font.size = Pt(13)
+          r.font.color.rgb = RGBColor(75, 85, 99)
+
+          # Metadata block
+          table = doc.add_table(rows=3, cols=2)
+          table.alignment = WD_TABLE_ALIGNMENT.LEFT
+          table.autofit = False
+          widths = [Inches(1.55), Inches(4.85)]
+          for row in table.rows:
+              for idx, cell in enumerate(row.cells):
+                  cell.width = widths[idx]
+                  cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+                  tcPr = cell._tc.get_or_add_tcPr()
+                  shd = OxmlElement('w:shd')
+                  shd.set(qn('w:fill'), 'F3F4F6')
+                  tcPr.append(shd)
+                  for paragraph in cell.paragraphs:
+                      paragraph.paragraph_format.space_before = Pt(4)
+                      paragraph.paragraph_format.space_after = Pt(4)
+
+          labels = ['Prepared for', 'Prepared by', 'Date']
+          values = ['GreyB', 'Scultra Research Workspace', '07/07/2026']
+          for i, row in enumerate(table.rows):
+              row.cells[0].text = labels[i]
+              row.cells[1].text = values[i]
+              for j, cell in enumerate(row.cells):
+                  for p in cell.paragraphs:
+                      for r in p.runs:
+                          r.font.name = 'Aptos'
+                          r.font.size = Pt(10)
+                          if j == 0:
+                              r.font.bold = True
+                              r.font.color.rgb = RGBColor(75, 85, 99)
+                          else:
+                              r.font.color.rgb = RGBColor(17, 24, 39)
+
+          p = doc.add_paragraph()
+          p.paragraph_format.space_before = Pt(35)
+          r = p.add_run('Scope: material-based lightweighting across cosmetic and personal care packaging, with commercial screening and IP landscape alignment.')
+          r.font.name = 'Aptos'
+          r.font.size = Pt(9.5)
+          r.font.color.rgb = RGBColor(107, 114, 128)
+
+          p = doc.add_paragraph()
+          p.paragraph_format.space_before = Pt(58)
+          r = p.add_run('Prepared as a corporate-style title page for the combined study package.')
+          r.font.name = 'Aptos'
+          r.font.size = Pt(8.5)
+          r.font.color.rgb = RGBColor(156, 163, 175)
+
+          doc.save(docx_path)
+
+          readme_path.write_text(
+              '# Creations\n\n'
+              'This folder stores created presentation/report assets for the cosmetic packaging lightweighting study.\n\n'
+              'Files currently included:\n'
+              '- `greyb_cosmetic_packaging_title_page.docx` — corporate-style Word title page prepared for GreyB, dated 07/07/2026.\n'
+              '- `cosmetic_packaging_hero.png` — hero image used in the title page.\n',
+              encoding='utf-8'
+          )
+          PY
+
+      - name: Commit Creations folder
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Creations/README.md Creations/greyb_cosmetic_packaging_title_page.docx Creations/cosmetic_packaging_hero.png
+          if git diff --cached --quiet; then
+            echo "No Creations changes to commit."
+          else
+            git commit -m "Add GreyB title page to Creations"
+            git push
+          fi
