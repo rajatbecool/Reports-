@@ -1,0 +1,213 @@
+name: Build Creations Scope Page
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-creations-scope-page.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-scope-page:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install python-docx
+
+      - name: Generate GreyB scope page in Creations
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from docx import Document
+          from docx.shared import Inches, Pt, RGBColor
+          from docx.enum.text import WD_ALIGN_PARAGRAPH
+          from docx.enum.table import WD_TABLE_ALIGNMENT, WD_CELL_VERTICAL_ALIGNMENT
+          from docx.oxml import OxmlElement
+          from docx.oxml.ns import qn
+
+          out_dir = Path('Creations')
+          out_dir.mkdir(parents=True, exist_ok=True)
+          docx_path = out_dir / 'greyb_scope_page.docx'
+          readme_path = out_dir / 'README.md'
+
+          NAVY = '0B1F3A'; BLUE = '49677F'; GOLD = 'C8A45D'; LIGHT = 'F4F6F8'; MID = 'E6EAF0'; DARK = '1F2937'; GREY = '6B7280'
+
+          def set_cell_shading(cell, fill):
+              tcPr = cell._tc.get_or_add_tcPr()
+              shd = OxmlElement('w:shd')
+              shd.set(qn('w:fill'), fill)
+              tcPr.append(shd)
+
+          def set_cell_border(cell, color='FFFFFF', sz='4'):
+              tc = cell._tc; tcPr = tc.get_or_add_tcPr()
+              tcBorders = tcPr.first_child_found_in('w:tcBorders')
+              if tcBorders is None:
+                  tcBorders = OxmlElement('w:tcBorders'); tcPr.append(tcBorders)
+              for edge in ('top', 'left', 'bottom', 'right'):
+                  element = tcBorders.find(qn('w:' + edge))
+                  if element is None:
+                      element = OxmlElement('w:' + edge); tcBorders.append(element)
+                  element.set(qn('w:val'), 'single'); element.set(qn('w:sz'), sz); element.set(qn('w:space'), '0'); element.set(qn('w:color'), color)
+
+          def set_cell_margins(cell, top=80, start=120, bottom=80, end=120):
+              tcPr = cell._tc.get_or_add_tcPr()
+              tcMar = tcPr.first_child_found_in('w:tcMar')
+              if tcMar is None:
+                  tcMar = OxmlElement('w:tcMar'); tcPr.append(tcMar)
+              for m, v in [('top', top), ('start', start), ('bottom', bottom), ('end', end)]:
+                  node = tcMar.find(qn('w:' + m))
+                  if node is None:
+                      node = OxmlElement('w:' + m); tcMar.append(node)
+                  node.set(qn('w:w'), str(v)); node.set(qn('w:type'), 'dxa')
+
+          def add_run(paragraph, text, size=10, color=DARK, bold=False, font='Aptos'):
+              run = paragraph.add_run(text)
+              run.font.name = font
+              run._element.rPr.rFonts.set(qn('w:eastAsia'), font)
+              run.font.size = Pt(size)
+              run.font.color.rgb = RGBColor.from_string(color)
+              run.font.bold = bold
+              return run
+
+          def clear_cell(cell):
+              for p in list(cell.paragraphs):
+                  p._element.getparent().remove(p._element)
+
+          def add_bullet(cell, text, size=8.8, color=DARK):
+              p = cell.add_paragraph()
+              p.paragraph_format.left_indent = Inches(0.12)
+              p.paragraph_format.first_line_indent = Inches(-0.12)
+              p.paragraph_format.space_after = Pt(4)
+              add_run(p, '- ', size=size, color=color, bold=True)
+              add_run(p, text, size=size, color=color)
+
+          def add_small_label(cell, text):
+              p = cell.add_paragraph(); p.paragraph_format.space_after = Pt(2)
+              add_run(p, text.upper(), size=8.5, color=BLUE, bold=True)
+
+          def add_section_title(doc, label, title):
+              p = doc.add_paragraph(); p.paragraph_format.space_before = Pt(8); p.paragraph_format.space_after = Pt(2)
+              add_run(p, label.upper(), size=8.5, color=GOLD, bold=True)
+              p2 = doc.add_paragraph(); p2.paragraph_format.space_after = Pt(5)
+              add_run(p2, title, size=13, color=NAVY, bold=True, font='Aptos Display')
+
+          doc = Document()
+          section = doc.sections[0]
+          section.page_width = Inches(8.27); section.page_height = Inches(11.69)
+          section.top_margin = Inches(0.6); section.bottom_margin = Inches(0.6)
+          section.left_margin = Inches(0.7); section.right_margin = Inches(0.7)
+          section.header_distance = Inches(0.3); section.footer_distance = Inches(0.3)
+
+          styles = doc.styles
+          styles['Normal'].font.name = 'Aptos'
+          styles['Normal']._element.rPr.rFonts.set(qn('w:eastAsia'), 'Aptos')
+          styles['Normal'].font.size = Pt(9)
+
+          header_table = doc.add_table(rows=1, cols=2)
+          header_table.alignment = WD_TABLE_ALIGNMENT.CENTER; header_table.autofit = False
+          header_table.columns[0].width = Inches(2.6); header_table.columns[1].width = Inches(4.1)
+          for row in header_table.rows:
+              for cell in row.cells:
+                  set_cell_border(cell, 'FFFFFF', '0'); set_cell_margins(cell, 0, 0, 0, 0)
+          cell = header_table.cell(0, 0); set_cell_shading(cell, NAVY); cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+          p = cell.paragraphs[0]; p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+          add_run(p, 'COMMERCIAL MATERIAL OPPORTUNITY LANDSCAPE', size=6.7, color='FFFFFF', bold=True)
+          cell2 = header_table.cell(0, 1)
+          p2 = cell2.paragraphs[0]; p2.paragraph_format.space_before = Pt(3)
+          add_run(p2, '04  |  STUDY SCOPE', size=8, color=GREY, bold=True)
+
+          p = doc.add_paragraph(); p.paragraph_format.space_before = Pt(6); p.paragraph_format.space_after = Pt(12); p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+          add_run(p, '________________________________________________________________________________', size=4, color=GOLD)
+
+          p = doc.add_paragraph(); p.paragraph_format.space_after = Pt(3)
+          add_run(p, 'Study Scope', size=28, color=NAVY, bold=True, font='Aptos Display')
+          p = doc.add_paragraph(); p.paragraph_format.space_after = Pt(12)
+          add_run(p, 'Defines the commercial, technical, and evidence boundaries for Part 1 of the cosmetic packaging lightweighting study.', size=10.5, color=GREY)
+
+          purpose = doc.add_table(rows=1, cols=1); purpose.alignment = WD_TABLE_ALIGNMENT.CENTER; purpose.autofit = False; purpose.columns[0].width = Inches(6.85)
+          cell = purpose.cell(0, 0); set_cell_shading(cell, LIGHT); set_cell_border(cell, MID, '8'); set_cell_margins(cell, 140, 180, 140, 180); clear_cell(cell)
+          add_small_label(cell, 'Objective')
+          p = cell.add_paragraph(); p.paragraph_format.space_after = Pt(0)
+          add_run(p, 'Evaluate material-based lightweighting opportunities across cosmetic and personal care packaging, with emphasis on commercial feasibility, premium-versus-mass-market fit, recyclability, formulation compatibility, and cost-performance trade-offs.', size=9.6, color=DARK)
+
+          add_section_title(doc, 'Boundary', 'What is included and excluded')
+          scope_table = doc.add_table(rows=1, cols=2); scope_table.alignment = WD_TABLE_ALIGNMENT.CENTER; scope_table.autofit = False
+          scope_table.columns[0].width = Inches(3.35); scope_table.columns[1].width = Inches(3.35)
+          for cell in scope_table.rows[0].cells:
+              set_cell_border(cell, 'FFFFFF', '8'); set_cell_margins(cell, 130, 160, 120, 160); cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.TOP
+          left, right = scope_table.cell(0, 0), scope_table.cell(0, 1)
+          set_cell_shading(left, 'F7FAFC'); set_cell_shading(right, 'FAFAFA'); clear_cell(left); clear_cell(right)
+          p = left.add_paragraph(); p.paragraph_format.space_after = Pt(6); add_run(p, 'IN SCOPE', size=10.5, color=NAVY, bold=True)
+          for b in [
+              'Cosmetics and personal care packaging formats across premium, masstige, and mass-market contexts.',
+              'Primary, secondary, tertiary/e-commerce, and refill packaging layers.',
+              'Material-led routes: plastics, glass, aluminum, paperboard, molded fiber, tubes, pouches, caps, closures, pumps, and dispensers.',
+              'Material density, weight, cost, recyclability, compatibility, and regulatory screening.',
+              'Cross-industry transfer from food, beverage, pharma, healthcare, automotive, aerospace, and electronics.',
+              'Commercial opportunity prioritization to guide the complementary patent landscape.'
+          ]:
+              add_bullet(left, b)
+          p = right.add_paragraph(); p.paragraph_format.space_after = Pt(6); add_run(p, 'OUT OF SCOPE', size=10.5, color=NAVY, bold=True)
+          for b in [
+              'Shape, pack-size, and cube-utilization optimization beyond material-led lightweighting.',
+              'Full life-cycle assessment, carbon accounting, or certified environmental claims.',
+              'Detailed SKU engineering, tooling design, line trials, or procurement quotations.',
+              'Consumer research, brand-positioning strategy, and visual identity redesign.',
+              'Freedom-to-operate, legal validity opinions, infringement analysis, or legal advice.',
+              'Final material qualification without formulation, stability, migration, and transport validation.'
+          ]:
+              add_bullet(right, b)
+
+          add_section_title(doc, 'Coverage lens', 'How the study views the packaging system')
+          cards = doc.add_table(rows=1, cols=3); cards.alignment = WD_TABLE_ALIGNMENT.CENTER; cards.autofit = False
+          for i in range(3): cards.columns[i].width = Inches(2.18)
+          for cell in cards.rows[0].cells:
+              set_cell_shading(cell, LIGHT); set_cell_border(cell, 'FFFFFF', '8'); set_cell_margins(cell, 120, 120, 120, 120); cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.TOP; clear_cell(cell)
+          card_data = [
+              ('Packaging layers', 'Primary containers, secondary cartons/boxes/inserts, tertiary/e-commerce protection, and refill formats.'),
+              ('Material routes', 'Material substitution, downgauging, lower-density structures, recycled/PCR content, mono-material design, and fiber alternatives.'),
+              ('Segment fit', 'Separate evaluation logic for premium/luxe packaging and mass-market packaging, with masstige treated as an overlap zone.')
+          ]
+          for cell, (title, desc) in zip(cards.rows[0].cells, card_data):
+              p = cell.add_paragraph(); p.paragraph_format.space_after = Pt(5); add_run(p, title, size=10, color=NAVY, bold=True)
+              p2 = cell.add_paragraph(); p2.paragraph_format.space_after = Pt(0); add_run(p2, desc, size=8.6, color=DARK)
+
+          add_section_title(doc, 'Assumptions', 'Boundary conditions for interpretation')
+          assump = doc.add_table(rows=1, cols=1); assump.alignment = WD_TABLE_ALIGNMENT.CENTER; assump.autofit = False; assump.columns[0].width = Inches(6.85)
+          cell = assump.cell(0, 0); set_cell_shading(cell, 'FFFDF7'); set_cell_border(cell, 'E9D8A6', '6'); set_cell_margins(cell, 80, 120, 80, 120); clear_cell(cell)
+          p = cell.add_paragraph(); p.paragraph_format.space_after = Pt(0)
+          add_run(p, 'Logistics impact is treated as weight-linked for this study; commercial evidence identifies attractive material routes; patent evidence will screen crowding, risk signals, and white-space potential; recommendations require product-specific validation before implementation.', size=8.1, color=DARK)
+
+          footer = section.footer
+          p = footer.paragraphs[0]; p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+          add_run(p, 'Cosmetic Packaging Lightweighting Study  |  Prepared for GreyB  |  04', size=7.5, color='9CA3AF')
+
+          doc.save(docx_path)
+
+          readme = '# Creations\n\nThis folder stores created presentation/report assets for the cosmetic packaging lightweighting study.\n\nFiles currently included:\n- `greyb_cosmetic_packaging_title_page.docx` - corporate-style Word title page prepared for GreyB, dated 07/07/2026.\n- `cosmetic_packaging_hero.png` - hero image used in the title page.\n- `greyb_scope_page.docx` - page 4 scope page for the report.\n'
+          readme_path.write_text(readme, encoding='utf-8')
+          PY
+
+      - name: Commit scope page
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Creations/README.md Creations/greyb_scope_page.docx
+          if git diff --cached --quiet; then
+            echo "No Creations scope page changes to commit."
+          else
+            git commit -m "Add GreyB scope page to Creations"
+            git push
+          fi
